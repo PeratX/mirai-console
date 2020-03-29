@@ -176,7 +176,6 @@ class MiraiDownloaderProgressBarInUI() : MiraiDownloadProgressBar {
     }
 
     override fun complete() {
-        TODO("Not yet implemented")
     }
 
 }

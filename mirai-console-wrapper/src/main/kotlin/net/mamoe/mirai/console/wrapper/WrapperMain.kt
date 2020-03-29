@@ -12,14 +12,13 @@ package net.mamoe.mirai.console.wrapper
 
 import kotlinx.coroutines.*
 import org.apache.commons.cli.*
-import java.awt.Frame
-import java.awt.Panel
 import java.awt.TextArea
-import java.awt.Toolkit
 import java.io.File
 import java.net.URLClassLoader
 import java.util.*
 import java.util.jar.Manifest
+import javax.swing.JFrame
+import javax.swing.JPanel
 import kotlin.system.exitProcess
 
 
@@ -97,24 +96,18 @@ object WrapperMain {
     }
 
     private fun startGraphical() {
-        val f = Frame("Mirai-Console Version Check")
+        val f = JFrame("Mirai-Console Version Check")
+        f.setSize(500, 200)
+        f.setLocationRelativeTo(null)
         f.isResizable = false
-        val srcSize = Toolkit.getDefaultToolkit().screenSize
 
-        val width = 300
-        val height = 200
-
-        val p = Panel()
-        val textArea = TextArea()
-        textArea.isEditable = false
-        p.add(textArea)
-        p.isVisible = true
-
-        f.setLocation((srcSize.width - width) / 2, (srcSize.height - height) / 2)
-        f.setSize(width, height)
+        val p = JPanel()
         f.add(p)
-        f.isVisible = true
+        val textArea = TextArea()
+        p.add(textArea)
+        textArea.isEditable = false
 
+        f.isVisible = true
 
         var uiOpen = true
         GlobalScope.launch {
