@@ -11,6 +11,7 @@
 package net.mamoe.mirai.console.wrapper
 
 import kotlinx.coroutines.*
+import org.apache.commons.cli.*
 import java.awt.Frame
 import java.awt.Panel
 import java.awt.TextArea
@@ -18,6 +19,8 @@ import java.awt.Toolkit
 import java.io.File
 import java.net.URLClassLoader
 import java.util.*
+import java.util.jar.Manifest
+import kotlin.system.exitProcess
 
 
 val contentPath by lazy {
@@ -31,46 +34,100 @@ val contentPath by lazy {
 object WrapperMain {
     internal var uiBarOutput = StringBuilder()
     private val uilog = StringBuilder()
+    private var checkUpdate = true
     internal fun uiLog(any: Any?) {
         if (any != null) {
             uilog.append(any)
         }
     }
 
+    fun buildCliOpts(): Options {
+        val opts = Options()
+        val config = Option("c", "config", true, "Specify configuration file for Mirai Console Wrapper")
+        config.isRequired = false
+        config.argName = "file"
+        opts.addOption(config)
+
+        val disUp = Option("u", "disable-update", false, "Disable auto update")
+        disUp.isRequired = false
+        opts.addOption(disUp)
+
+        val native = Option("n", "native", false, "Native mode")
+        native.isRequired = false
+        opts.addOption(native)
+
+        return opts
+    }
+
+    fun getRevision(): String {
+        val mf = this.javaClass.classLoader.getResources("META-INF/MANIFEST.MF")
+        while (mf.hasMoreElements()) {
+            val manifest = Manifest(mf.nextElement().openStream())
+            if ("Mirai Console Wrapper" == manifest.mainAttributes.getValue("Name")) {
+                return manifest.mainAttributes.getValue("Revision")
+            }
+        }
+        return "Unknown"
+    }
+
     @JvmStatic
     fun main(args: Array<String>) {
         gc()
-        if (args.contains("native") || args.contains("-native")) {
 
-            val f = Frame("Mirai-Console Version Check")
-            f.isResizable = false
-            val srcSize = Toolkit.getDefaultToolkit().screenSize
+        println("Mirai Console Wrapper by PeratX@iTXTech.org")
+        println("Revision: " + getRevision())
+        println("https://github.com/PeratX/mirai-console")
 
-            val width = 300
-            val height = 200
+        val opts = buildCliOpts()
+        try {
+            val cmd = DefaultParser().parse(opts, args)
+            if (cmd.hasOption("u")) {
+                checkUpdate = false
+            }
+            if (cmd.hasOption("n")) {
+                startGraphical()
+            } else {
+                preStartInNonNative()
+            }
+        } catch (e: ParseException) {
+            println(e.message)
+            HelpFormatter().printHelp("wrapper", opts)
+            exitProcess(1)
+        }
+    }
 
-            val p = Panel()
-            val textArea = TextArea()
-            textArea.isEditable = false
-            p.add(textArea)
-            p.isVisible = true
+    private fun startGraphical() {
+        val f = Frame("Mirai-Console Version Check")
+        f.isResizable = false
+        val srcSize = Toolkit.getDefaultToolkit().screenSize
 
-            f.setLocation((srcSize.width - width) / 2, (srcSize.height - height) / 2)
-            f.setSize(width, height)
-            f.add(p)
-            f.isVisible = true
+        val width = 300
+        val height = 200
 
-            uiLog("正在进行版本检查\n")
+        val p = Panel()
+        val textArea = TextArea()
+        textArea.isEditable = false
+        p.add(textArea)
+        p.isVisible = true
 
-            var uiOpen = true
-            GlobalScope.launch {
-                while (isActive && uiOpen) {
-                    delay(16)//60 fps
-                    withContext(Dispatchers.Main) {
-                        textArea.text = uilog.toString() + "\n" + uiBarOutput.toString()
-                    }
+        f.setLocation((srcSize.width - width) / 2, (srcSize.height - height) / 2)
+        f.setSize(width, height)
+        f.add(p)
+        f.isVisible = true
+
+
+        var uiOpen = true
+        GlobalScope.launch {
+            while (isActive && uiOpen) {
+                delay(16)//60 fps
+                withContext(Dispatchers.Main) {
+                    textArea.text = uilog.toString() + "\n" + uiBarOutput.toString()
                 }
             }
+        }
+
+        if (checkUpdate) {
+            uiLog("正在进行版本检查\n")
             runBlocking {
                 launch {
                     CoreUpdater.versionCheck()
@@ -83,11 +140,8 @@ object WrapperMain {
             runBlocking {
                 MiraiDownloader.downloadIfNeed(true)
             }
-            start(CONSOLE_GRAPHICAL)
-
-        } else {
-            preStartInNonNative()
         }
+        start(CONSOLE_GRAPHICAL)
     }
 
 
@@ -111,21 +165,22 @@ object WrapperMain {
             }
             WrapperProperties.content = type
         }
-        println("Starting version check...")
-        runBlocking {
-            launch {
-                CoreUpdater.versionCheck()
+        if (checkUpdate) {
+            println("Starting version check...")
+            runBlocking {
+                launch {
+                    CoreUpdater.versionCheck()
+                }
+                launch {
+                    ConsoleUpdater.versionCheck(type)
+                }
             }
-            launch {
-                ConsoleUpdater.versionCheck(type)
+
+            runBlocking {
+                MiraiDownloader.downloadIfNeed(false)
             }
+            println("Version check complete.")
         }
-
-        runBlocking {
-            MiraiDownloader.downloadIfNeed(false)
-        }
-
-        println("Version check complete, starting Mirai")
         println("shadow-Protocol:" + CoreUpdater.getProtocolLib()!!)
         println("Console        :" + ConsoleUpdater.getFile()!!)
         println("Root           :" + System.getProperty("user.dir") + "/")
