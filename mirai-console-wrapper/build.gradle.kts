@@ -8,6 +8,9 @@ apply(plugin = "com.github.johnrengelman.shadow")
 tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
     manifest {
         attributes["Main-Class"] = "net.mamoe.mirai.console.wrapper.WrapperMain"
+        attributes["Name"] = "Mirai Console Wrapper"
+        attributes["Revision"] = Runtime.getRuntime().exec("git rev-parse --short HEAD")
+            .inputStream.bufferedReader().readText().trim()
     }
 }
 

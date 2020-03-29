@@ -58,11 +58,12 @@ internal object ConsoleUpdater {
             this.getFile()?.delete()
             /**
             MiraiDownloader.addTask(
-                "https://raw.githubusercontent.com/mamoe/mirai-repo/master/shadow/${getProjectName()}/${getProjectName()}-$newest.jar",getContent("${getProjectName()}-$newest.jar")
+            "https://raw.githubusercontent.com/mamoe/mirai-repo/master/shadow/${getProjectName()}/${getProjectName()}-$newest.jar",getContent("${getProjectName()}-$newest.jar")
             )
-            */
+             */
             MiraiDownloader.addTask(
-                "https://pan.jasonczc.cn/?/mirai/${getProjectName()}/${getProjectName()}-$newest.pdf", getContent("${getProjectName()}-$newest.jar")
+                "https://pan.jasonczc.cn/?/mirai/${getProjectName()}/${getProjectName()}-$newest.pdf",
+                getContent("${getProjectName()}-$newest.jar")
             )
         }
     }

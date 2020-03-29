@@ -10,22 +10,32 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.system.exitProcess
 
-internal object MiraiDownloader{
-    private val tasks = mutableMapOf<String,File>()
+internal object MiraiDownloader {
+    private val tasks = mutableMapOf<String, File>()
 
     fun addTask(
         fromUrl: String,
         to: File
-    ){
+    ) {
         tasks[fromUrl] = to
     }
 
-    suspend fun downloadIfNeed(isUI:Boolean){
-        if(tasks.isNotEmpty()){
-            if(!isUI) {
-                MiraiDownloaderImpl(EmptyCoroutineContext, tasks, false, MiraiDownloaderProgressBarInTerminal()).waitUntilFinish()
-            }else{
-                MiraiDownloaderImpl(EmptyCoroutineContext, tasks, false, MiraiDownloaderProgressBarInUI()).waitUntilFinish()
+    suspend fun downloadIfNeed(isUI: Boolean) {
+        if (tasks.isNotEmpty()) {
+            if (!isUI) {
+                MiraiDownloaderImpl(
+                    EmptyCoroutineContext,
+                    tasks,
+                    false,
+                    MiraiDownloaderProgressBarInTerminal()
+                ).waitUntilFinish()
+            } else {
+                MiraiDownloaderImpl(
+                    EmptyCoroutineContext,
+                    tasks,
+                    false,
+                    MiraiDownloaderProgressBarInUI()
+                ).waitUntilFinish()
             }
         }
     }
@@ -35,18 +45,18 @@ internal object MiraiDownloader{
 private class MiraiDownloaderImpl(
     override val coroutineContext: CoroutineContext = EmptyCoroutineContext,
     tasks: Map<String, File>,
-    val background:Boolean,
-    val bar:MiraiDownloadProgressBar
-):CoroutineScope {
+    val background: Boolean,
+    val bar: MiraiDownloadProgressBar
+) : CoroutineScope {
 
-    fun log(any:Any?){
-        if(!background && any != null){
+    fun log(any: Any?) {
+        if (!background && any != null) {
             println(background)
         }
     }
 
     var totalDownload = AtomicInteger(0)
-    var totalSize     = AtomicInteger(0)
+    var totalSize = AtomicInteger(0)
 
     private var isDownloadFinish: Job
 
@@ -61,12 +71,15 @@ private class MiraiDownloaderImpl(
         }
     }
 
-    suspend fun waitUntilFinish(){
-        while (!isDownloadFinish.isCompleted){
-            bar.update(totalDownload.get().toFloat()/totalSize.get(),(totalSize.get()/(1024*1024)).toString() +   "MB" )
+    suspend fun waitUntilFinish() {
+        while (!isDownloadFinish.isCompleted) {
+            bar.update(
+                totalDownload.get().toFloat() / totalSize.get(),
+                (totalSize.get() / (1024 * 1024)).toString() + "MB"
+            )
             delay(50)
         }
-        bar.update(1F,"Complete")
+        bar.update(1F, "Complete")
         bar.complete()
     }
 
@@ -76,7 +89,7 @@ private class MiraiDownloaderImpl(
         withContext(Dispatchers.IO) {
             try {
                 val con = URL(fromUrl).openConnection() as HttpURLConnection
-                val input= con.inputStream
+                val input = con.inputStream
                 totalSize.addAndGet(con.contentLength)
                 val outputStream = FileOutputStream(file)
                 var len = -1
@@ -85,8 +98,8 @@ private class MiraiDownloaderImpl(
                     totalDownload.addAndGet(buff.size)
                     outputStream.write(buff, 0, len)
                 }
-            }catch (e: Exception){
-                bar.update(1F,"Failed")
+            } catch (e: Exception) {
+                bar.update(1F, "Failed")
                 bar.complete()
                 println("Failed to download resources from " + fromUrl + " reason " + e.message)
                 e.printStackTrace()
@@ -99,29 +112,30 @@ private class MiraiDownloaderImpl(
 }
 
 
-interface MiraiDownloadProgressBar{
+interface MiraiDownloadProgressBar {
     fun reset()
     fun update(rate: Float, message: String)
     fun complete()
     fun ad()
 }
 
-class MiraiDownloaderProgressBarInTerminal(): MiraiDownloadProgressBar{
+class MiraiDownloaderProgressBarInTerminal() : MiraiDownloadProgressBar {
 
     override fun reset() {
         print('\r')
     }
 
-    override fun ad(){
+    override fun ad() {
         println("Mirai Downloader")
         println("[Mirai国内镜像] 感谢崔Cloud慷慨提供免费的国内储存分发")
     }
+
     private val barLen = 40
 
     override fun update(rate: Float, message: String) {
         reset()
         print("Progress: ")
-        val len =  (rate * barLen).toInt()
+        val len = (rate * barLen).toInt()
         for (i in 0 until len) {
             print("#")
         }
@@ -131,26 +145,27 @@ class MiraiDownloaderProgressBarInTerminal(): MiraiDownloadProgressBar{
         print("  | $message")
     }
 
-    override fun complete(){
+    override fun complete() {
         println()
     }
 }
 
-class MiraiDownloaderProgressBarInUI(): MiraiDownloadProgressBar{
+class MiraiDownloaderProgressBarInUI() : MiraiDownloadProgressBar {
 
     override fun reset() {
         WrapperMain.uiBarOutput.clear()
     }
 
-    override fun ad(){
+    override fun ad() {
         WrapperMain.uiLog("[Mirai国内镜像] 感谢崔Cloud慷慨提供更新服务器")
     }
+
     private val barLen = 20
 
     override fun update(rate: Float, message: String) {
         reset()
         WrapperMain.uiBarOutput.append("Progress: ")
-        val len =  (rate * barLen).toInt()
+        val len = (rate * barLen).toInt()
         for (i in 0 until len) {
             WrapperMain.uiBarOutput.append("#")
         }
