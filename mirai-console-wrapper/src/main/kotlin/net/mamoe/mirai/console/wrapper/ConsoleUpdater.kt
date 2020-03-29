@@ -62,7 +62,7 @@ internal object ConsoleUpdater {
             )
              */
             MiraiDownloader.addTask(
-                "https://pan.jasonczc.cn/?/mirai/${getProjectName()}/${getProjectName()}-$newest.pdf",
+                "https://pan.jasonczc.cn/?/mirai/${getProjectName()}/${getProjectName()}-$newest.mp4",
                 getContent("${getProjectName()}-$newest.jar")
             )
         }
