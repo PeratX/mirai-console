@@ -69,6 +69,10 @@ object WrapperMain {
         return "Unknown"
     }
 
+    fun File.backup() {
+        renameTo(File("$absolutePath.bak"))
+    }
+
     @JvmStatic
     fun main(args: Array<String>) {
         gc()

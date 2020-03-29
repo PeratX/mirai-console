@@ -13,6 +13,7 @@ package net.mamoe.mirai.console.wrapper
 
 import io.ktor.client.request.get
 import io.ktor.http.URLProtocol
+import net.mamoe.mirai.console.wrapper.WrapperMain.backup
 import java.io.File
 import kotlin.math.pow
 import kotlin.system.exitProcess
@@ -36,7 +37,7 @@ internal object CoreUpdater {
         println("Local Core Version: $current | Newest Core Version: $newest")
         if (current != newest) {
             println("Updating shadowed-core from V$current -> V$newest, this is a force update")
-            this.getProtocolLib()?.delete()
+            this.getProtocolLib()?.backup()
             MiraiDownloader
                 .addTask(
                     "https://pan.jasonczc.cn/?/mirai/mirai-core-qqandroid/mirai-core-qqandroid-$newest.mp4",
