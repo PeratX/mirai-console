@@ -11,10 +11,8 @@
 
 package net.mamoe.mirai.console.plugins
 
-import com.alibaba.fastjson.JSON
-import com.alibaba.fastjson.JSONObject
-import com.alibaba.fastjson.TypeReference
-import com.alibaba.fastjson.parser.Feature
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.moandjiezana.toml.Toml
 import com.moandjiezana.toml.TomlWriter
 import kotlinx.serialization.Serializable
@@ -478,16 +476,17 @@ class JsonConfig internal constructor(
         if (content.isEmpty() || content.isBlank() || content == "{}") {
             return ConfigSectionImpl()
         }
-        return JSON.parseObject(
-            content,
-            object : TypeReference<ConfigSectionImpl>() {},
-            Feature.OrderedField
+        val gson = Gson()
+        val typeRef = object : TypeToken<Map<String, Any>>() {}.type
+        return ConfigSectionDelegation(
+            gson.fromJson(content, typeRef)
         )
     }
 
     @UnstableDefault
     override fun serialize(config: ConfigSection): String {
-        return JSONObject.toJSONString(config)
+        val gson = Gson()
+        return gson.toJson(config.toMap())
     }
 }
 

@@ -133,10 +133,16 @@ object WrapperMain {
                     ConsoleUpdater.versionCheck(CONSOLE_GRAPHICAL)
                 }
             }
-            uiLog("版本检查完成\n")
+            uiLog("版本检查完成, 启动中\n")
             runBlocking {
                 MiraiDownloader.downloadIfNeed(true)
             }
+        }
+
+        GlobalScope.launch {
+            delay(3000)
+            uiOpen = false
+            f.isVisible = false
         }
         start(CONSOLE_GRAPHICAL)
     }

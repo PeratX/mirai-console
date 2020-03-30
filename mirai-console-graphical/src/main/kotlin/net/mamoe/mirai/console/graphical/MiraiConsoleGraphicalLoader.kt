@@ -8,23 +8,22 @@
  */
 package net.mamoe.mirai.console.graphical
 
-import net.mamoe.mirai.console.pure.MiraiConsoleUIPure
-
 import net.mamoe.mirai.console.MiraiConsole
 import tornadofx.launch
 import kotlin.concurrent.thread
 
 class MiraiConsoleGraphicalLoader {
      companion object {
-         internal lateinit var coreVersion   :String
-         internal lateinit var consoleVersion: String
+         internal var coreVersion: String = "0.0.0"
+         internal var consoleVersion: String = "0.0.0"
+
          @JvmStatic
          fun load(
-            coreVersion: String,
-            consoleVersion: String
+             coreVersion: String,
+             consoleVersion: String
          ) {
-            this.coreVersion    = coreVersion
-            this.consoleVersion = consoleVersion
+             this.coreVersion = coreVersion
+             this.consoleVersion = consoleVersion
              Runtime.getRuntime().addShutdownHook(thread(start = false) {
                  MiraiConsole.stop()
              })
