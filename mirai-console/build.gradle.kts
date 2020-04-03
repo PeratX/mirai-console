@@ -28,11 +28,10 @@ dependencies {
     api("com.google.code.gson:gson:2.8.6")
     api(group = "org.yaml", name = "snakeyaml", version = "1.25")
     api(group = "com.moandjiezana.toml", name = "toml4j", version = "0.7.2")
-
+    api("org.jsoup:jsoup:1.12.1")
 
     testApi("net.mamoe:mirai-core-qqandroid-jvm:${Versions.Mirai.core}")
     testApi(kotlin("stdlib"))
-    testApi("org.jsoup:jsoup:1.12.1")
 }
 
 version = Versions.Mirai.console
@@ -103,4 +102,8 @@ compileKotlin.kotlinOptions {
 val compileTestKotlin: KotlinCompile by tasks
 compileTestKotlin.kotlinOptions {
     jvmTarget = "1.8"
+}
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
 }
