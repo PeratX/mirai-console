@@ -14,7 +14,12 @@ package net.mamoe.mirai.console.plugins
 import kotlinx.coroutines.*
 import net.mamoe.mirai.console.MiraiConsole
 import net.mamoe.mirai.console.command.Command
+import net.mamoe.mirai.console.command.CommandManager
 import net.mamoe.mirai.console.command.CommandSender
+import net.mamoe.mirai.console.command.JCommandManager
+import net.mamoe.mirai.console.events.EventListener
+import net.mamoe.mirai.console.scheduler.PluginScheduler
+import net.mamoe.mirai.console.scheduler.SchedulerTaskManagerInstance
 import net.mamoe.mirai.utils.MiraiLogger
 import net.mamoe.mirai.utils.SimpleLogger
 import java.io.File
@@ -126,6 +131,30 @@ abstract class PluginBase
     }
 
     internal var pluginName: String = ""
+
+
+    /**
+     * Java API Scheduler
+     */
+    private var scheduler:PluginScheduler? = null
+    fun getScheduler():PluginScheduler{
+        if(scheduler === null){
+            scheduler = SchedulerTaskManagerInstance.getPluginScheduler(this)
+        }
+        return scheduler!!
+    }
+
+    /**
+     * Java API EventListener
+     */
+    private var eventListener:EventListener? = null
+    fun getEventListener():EventListener{
+        if(eventListener === null){
+            eventListener = EventListener(this)
+        }
+        return eventListener!!
+    }
+
 }
 
 /**

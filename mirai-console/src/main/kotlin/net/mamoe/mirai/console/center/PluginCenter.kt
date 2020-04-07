@@ -28,7 +28,7 @@ interface PluginCenter {
         val description: String,
         val usage: String,
         val vcs: String,
-        val commands: String,
+        val commands: List<String>,
         val changeLog: List<String>
     )
 
@@ -45,6 +45,10 @@ interface PluginCenter {
      */
     suspend fun findPlugin(name:String):PluginInfo?
 
+
+    suspend fun <T:Any> T.downloadPlugin(name:String, progressListener:T.(Float) -> Unit)
+
+    suspend fun downloadPlugin(name:String, progressListener:PluginCenter.(Float) -> Unit) = downloadPlugin<PluginCenter>(name,progressListener)
 
     /**
      * 刷新

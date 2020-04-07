@@ -1,14 +1,21 @@
 package net.mamoe.mirai.console.center
 
-import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import net.mamoe.mirai.console.plugins.PluginManager
+import net.mamoe.mirai.console.utils.tryNTimes
+import org.jsoup.Connection
 import org.jsoup.Jsoup
+import java.io.File
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.system.exitProcess
 
-object CuiPluginCenter: PluginCenter{
+internal object CuiPluginCenter: PluginCenter{
 
     var plugins:JsonArray? = null
 
@@ -24,20 +31,20 @@ object CuiPluginCenter: PluginCenter{
             if(plugins == null){
                 refresh()
             }
-            if(it > plugins!!.size()){
+            if(it >= plugins!!.size()){
                 return@forEach
             }
             val info = plugins!![it]
             with(info.asJsonObject){
                 map[this.get("name").asString] = PluginCenter.PluginInsight(
-                    this.get("name").asString,
-                    this.get("version").asString,
-                    this.get("core").asString,
-                    this.get("console").asString,
-                    this.get("author").asString,
-                    this.get("contact").asString,
-                    this.get("tags").asJsonArray.map { it.asString },
-                    this.get("commands").asJsonArray.map { it.asString }
+                    this.get("name")?.asString ?: "",
+                    this.get("version")?.asString ?: "",
+                    this.get("core")?.asString ?: "",
+                    this.get("console")?.asString ?: "",
+                    this.get("author")?.asString ?: "",
+                    this.get("description")?.asString ?: "",
+                    this.get("tags")?.asJsonArray?.map { it.asString } ?: arrayListOf(),
+                    this.get("commands")?.asJsonArray?.map { it.asString } ?: arrayListOf()
                 )
             }
         }
@@ -45,21 +52,76 @@ object CuiPluginCenter: PluginCenter{
     }
 
     override suspend fun findPlugin(name: String): PluginCenter.PluginInfo? {
-        TODO()
+        val result = withContext(Dispatchers.IO){
+            tryNTimes {
+                Jsoup
+                    .connect("https://miraiapi.jasonczc.cn/getPluginDetailedInfo?name=$name")
+                    .method(Connection.Method.GET)
+                    .ignoreContentType(true)
+                    .execute()
+            }
+        }.body()
+
+        if(result == "err:not found"){
+            return null
+        }
+
+        return result.asJson().run{
+            PluginCenter.PluginInfo(
+                this.get("name")?.asString ?: "",
+                this.get("version")?.asString ?: "",
+                this.get("core")?.asString ?: "",
+                this.get("console")?.asString ?: "",
+                this.get("tags")?.asJsonArray?.map { it.asString } ?: arrayListOf(),
+                this.get("author")?.asString ?: "",
+                this.get("contact")?.asString ?: "",
+                this.get("description")?.asString ?: "",
+                this.get("usage")?.asString ?: "",
+                this.get("vsc")?.asString ?: "",
+                this.get("commands")?.asJsonArray?.map { it.asString } ?: arrayListOf(),
+                this.get("changeLog")?.asJsonArray?.map { it.asString } ?: arrayListOf()
+            )
+        }
+
     }
 
     override suspend fun refresh() {
         val results =
-            withContext(Dispatchers.IO) {
-                Jsoup
-                    .connect("https://miraiapi.jasonczc.cn/getPluginList")
-                    .ignoreContentType(true)
-                    .execute()
-            }.body().asJson()
+                withContext(Dispatchers.IO) {
+                    tryNTimes {
+                        Jsoup
+                            .connect("https://miraiapi.jasonczc.cn/getPluginList")
+                            .ignoreContentType(true)
+                            .execute()
+                    }
+                }.body().asJson()
+
         if(!(results.has("success") && results["success"].asBoolean)){
             error("Failed to fetch plugin list from Cui Cloud")
         }
-        plugins = results.getAsJsonArray("result")//先不解析
+        plugins = results.get("result").asJsonArray//先不解析
+    }
+
+    override suspend fun <T : Any> T.downloadPlugin(name: String, progressListener: T.(Float) -> Unit){
+        val info = findPlugin(name) ?: error("Plugin Not Found")
+        withContext(Dispatchers.IO) {
+            tryNTimes {
+                val con =
+                    URL("https://pan.jasonczc.cn/?/mirai/plugins/$name/$name-" + info.version + ".mp4").openConnection() as HttpURLConnection
+                val input = con.inputStream
+                val size = con.contentLength
+                var totalDownload = 0F
+                val targetFile = File(PluginManager.pluginsPath, "$name-" + info.version + ".jar")
+                val outputStream = FileOutputStream(targetFile)
+                var len: Int
+                val buff = ByteArray(1024)
+                while (input.read(buff).also { len = it } != -1) {
+                    totalDownload += len
+                    outputStream.write(buff, 0, len)
+                    progressListener.invoke(this@downloadPlugin, totalDownload / size)
+                }
+            }
+        }
     }
 
     override val name: String
@@ -71,3 +133,4 @@ object CuiPluginCenter: PluginCenter{
     }
 
 }
+

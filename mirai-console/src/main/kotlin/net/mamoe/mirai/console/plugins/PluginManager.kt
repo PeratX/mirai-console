@@ -22,8 +22,8 @@ import java.io.File
 import java.io.InputStream
 import java.lang.reflect.Constructor
 import java.lang.reflect.Method
+import java.net.JarURLConnection
 import java.net.URL
-import java.net.URLClassLoader
 import java.util.jar.JarFile
 
 
@@ -37,12 +37,35 @@ object PluginManager {
         MiraiConsole.logger(p, "[Plugin Manager]", 0, e)
     }
 
-    //已完成加载的
+    /**
+     * 加载成功的插件, 名字->插件
+     */
     private val nameToPluginBaseMap: MutableMap<String, PluginBase> = mutableMapOf()
+
+    /**
+     * 加载成功的插件, 名字->插件摘要
+     */
     private val pluginDescriptions: MutableMap<String, PluginDescription> = mutableMapOf()
 
+    /**
+     * 加载插件的ClassLoader
+     */
+    private val pluginsClassLoader: PluginsClassLoader = PluginsClassLoader(this.javaClass.classLoader)
+
+    /**
+     * 插件优先级队列
+     * 任何操作应该按这个Sequence顺序进行
+     * 他的优先级取决于依赖,
+     * 在这个队列中, 被依赖的插件会在依赖的插件之前
+     */
+    private val pluginsSequence: MutableList<PluginBase> = mutableListOf()
+
+
+    /**
+     * 广播Command方法
+     */
     internal fun onCommand(command: Command, sender: CommandSender, args: List<String>) {
-        nameToPluginBaseMap.values.forEach {
+        pluginsSequence.forEach {
             try {
                 it.onCommand(command, sender, args)
             } catch (e: Throwable) {
@@ -51,7 +74,9 @@ object PluginManager {
         }
     }
 
-
+    /**
+     * 通过插件获取介绍
+     */
     fun getPluginDescription(base: PluginBase): PluginDescription {
         nameToPluginBaseMap.forEach { (s, pluginBase) ->
             if (pluginBase == base) {
@@ -61,6 +86,9 @@ object PluginManager {
         error("can not find plugin description")
     }
 
+    /**
+     * 获取所有插件摘要
+     */
     fun getAllPluginDescriptions(): Collection<PluginDescription> {
         return pluginDescriptions.values
     }
@@ -69,29 +97,40 @@ object PluginManager {
     @Volatile
     internal var lastPluginName: String = ""
 
-    /**
-     * 尝试加载全部插件
-     */
-    fun loadPlugins() {
-        val pluginsFound: MutableMap<String, PluginDescription> = mutableMapOf()
-        val pluginsLocation: MutableMap<String, File> = mutableMapOf()
 
-        logger.info("""开始加载${pluginsPath}下的插件""")
+
+    /**
+     * 寻找所有安装的插件（在文件夹）, 并将它读取, 记录位置
+     * 这个不等同于加载的插件, 可以理解为还没有加载的插件
+     */
+    data class FindPluginsResult(
+        val pluginsLocation: MutableMap<String, File>,
+        val pluginsFound: MutableMap<String, PluginDescription>
+    )
+
+    internal fun findPlugins():FindPluginsResult{
+        val pluginsLocation: MutableMap<String, File> = mutableMapOf()
+        val pluginsFound: MutableMap<String, PluginDescription> = mutableMapOf()
 
         File(pluginsPath).listFiles()?.forEach { file ->
             if (file != null && file.extension == "jar") {
                 val jar = JarFile(file)
                 val pluginYml =
                     jar.entries().asSequence().filter { it.name.toLowerCase().contains("plugin.yml") }.firstOrNull()
+
                 if (pluginYml == null) {
                     logger.info("plugin.yml not found in jar " + jar.name + ", it will not be consider as a Plugin")
                 } else {
                     try {
-                        val description =
-                            PluginDescription.readFromContent(
-                                URL("jar:file:" + file.absoluteFile + "!/" + pluginYml.name).openConnection().inputStream.use {
-                                    it.readBytes().encodeToString()
-                                })
+                        val description = PluginDescription.readFromContent(
+                            URL("jar:file:" + file.absoluteFile + "!/" + pluginYml.name).openConnection().let {
+                                val res = it.inputStream.use { input ->
+                                    input.readBytes().encodeToString()
+                                }
+                                // 关闭jarFile，解决热更新插件问题
+                                (it as JarURLConnection).jarFile.close()
+                                res
+                            })
                         pluginsFound[description.name] = description
                         pluginsLocation[description.name] = file
                     } catch (e: Exception) {
@@ -100,8 +139,17 @@ object PluginManager {
                 }
             }
         }
+        return FindPluginsResult(pluginsLocation, pluginsFound)
+    }
 
-        val pluginsClassLoader = PluginsClassLoader(pluginsLocation.values,this.javaClass.classLoader)
+    /**
+     * 尝试加载全部插件
+     */
+    fun loadPlugins() {
+        logger.info("""开始加载${pluginsPath}下的插件""")
+        val findPluginsResult = findPlugins()
+        val pluginsFound = findPluginsResult.pluginsFound
+        val pluginsLocation = findPluginsResult.pluginsLocation
 
         //不仅要解决A->B->C->A, 还要解决A->B->C->A
         fun checkNoCircularDepends(
@@ -133,7 +181,10 @@ object PluginManager {
             checkNoCircularDepends(it, it.depends, mutableListOf())
         }
 
-        //load plugin
+        //插件加载器导入插件jar
+        pluginsClassLoader.loadPlugins(pluginsLocation)
+
+        //load plugin individually
         fun loadPlugin(description: PluginDescription): Boolean {
             if (!description.noCircularDepend) {
                 logger.error("Failed to load plugin " + description.name + " because it has circular dependency")
@@ -151,7 +202,7 @@ object PluginManager {
                 }
                 val depend = pluginsFound[dependent]!!
 
-                if (!loadPlugin(depend)) {
+                if (!loadPlugin(depend)) {//先加载depend
                     logger.error("Failed to load plugin " + description.name + " because " + dependent + " as dependency failed to load")
                     return false
                 }
@@ -167,7 +218,7 @@ object PluginManager {
                 }
 
                 return try {
-                    val subClass = pluginClass.asSubclass(PluginBase::class.java)
+                    val subClass = pluginClass!!.asSubclass(PluginBase::class.java)
 
                     lastPluginName = description.name
                     val plugin: PluginBase =
@@ -183,6 +234,7 @@ object PluginManager {
                     nameToPluginBaseMap[description.name] = plugin
                     pluginDescriptions[description.name] = description
                     plugin.pluginName = description.name
+                    pluginsSequence.add(plugin)//按照实际加载顺序加入队列
                     true
                 } catch (e: ClassCastException) {
                     logger.error("failed to load plugin " + description.name + " , Main class does not extends PluginBase ")
@@ -195,11 +247,16 @@ object PluginManager {
             }
         }
 
+
+        //清掉优先级队列, 来重新填充
+        pluginsSequence.clear()
+
         pluginsFound.values.forEach {
             loadPlugin(it)
         }
 
-        nameToPluginBaseMap.values.forEach {
+
+        pluginsSequence.forEach {
             try {
                 it.onLoad()
             } catch (ignored: Throwable) {
@@ -214,7 +271,7 @@ object PluginManager {
             }
         }
 
-        nameToPluginBaseMap.values.forEach {
+        pluginsSequence.forEach {
             try {
                 it.enable()
             } catch (ignored: Throwable) {
@@ -240,23 +297,28 @@ object PluginManager {
         plugin.disable(exception)
         nameToPluginBaseMap.remove(plugin.pluginName)
         pluginDescriptions.remove(plugin.pluginName)
+        pluginsClassLoader.remove(plugin.pluginName)
+        pluginsSequence.remove(plugin)
     }
 
 
     @JvmOverloads
     fun disablePlugins(throwable: CancellationException? = null) {
         CommandManager.clearPluginsCommands()
-        nameToPluginBaseMap.values.forEach {
+        pluginsSequence.forEach {
             it.disable(throwable)
         }
         nameToPluginBaseMap.clear()
         pluginDescriptions.clear()
+        pluginsClassLoader.clear()
+        pluginsSequence.clear()
     }
 
 
     /**
      * 根据插件名字找Jar的文件
      * null => 没找到
+     * 这里的url的jarFile没关，热更新插件可能出事
      */
     fun getJarFileByName(pluginName: String): File? {
         File(pluginsPath).listFiles()?.forEach { file ->
@@ -282,6 +344,7 @@ object PluginManager {
     /**
      * 根据插件名字找Jar中的文件
      * null => 没找到
+     * 这里的url的jarFile没关，热更新插件可能出事
      */
     fun getFileInJarByName(pluginName: String, toFind: String): InputStream? {
         val jarFile = getJarFileByName(pluginName) ?: return null
@@ -308,4 +371,3 @@ private fun Constructor<out PluginBase>.againstPermission() {
     }
 }
 
-internal class PluginsClassLoader(files: Collection<File>, parent: ClassLoader) : URLClassLoader(files.map{it.toURI().toURL()}.toTypedArray(), parent)

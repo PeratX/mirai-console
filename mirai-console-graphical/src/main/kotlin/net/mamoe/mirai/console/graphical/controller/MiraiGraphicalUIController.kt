@@ -33,9 +33,9 @@ class MiraiGraphicalUIController : Controller(), MiraiConsoleUI {
     val botList = observableListOf<BotModel>()
     val pluginList: ObservableList<PluginModel> by lazy(::getPluginsFromConsole)
 
-    val consoleInfo = ConsoleInfo()
+    private val consoleInfo = ConsoleInfo()
 
-    val sdf by lazy {
+    private val sdf by lazy {
         SimpleDateFormat("HH:mm:ss")
     }
 
@@ -123,6 +123,29 @@ class MiraiGraphicalUIController : Controller(), MiraiConsoleUI {
         while (size > settingModel.item.maxLongNum) {
             this.removeAt(0)
         }
+    }
+
+    fun checkUpdate(plugin: PluginModel) {
+        pluginList.forEach {
+            if (it.name == plugin.name && it.author == plugin.author) {
+                if (plugin.version > it.version) {
+                    it.expired = true
+                    return
+                }
+            }
+        }
+    }
+
+    /**
+     * return `true` when command is ambiguous
+     */
+    fun checkAmbiguous(plugin: PluginModel) : Boolean {
+        plugin.insight?.commands?.forEach { name ->
+            CommandManager.commands.forEach {
+                if (name == it.name) return true
+            }
+        } ?: return false
+        return false
     }
 
 }
