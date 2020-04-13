@@ -94,11 +94,8 @@ object PluginManager {
         return pluginDescriptions.values
     }
 
-
     @Volatile
     internal var lastPluginName: String = ""
-
-
 
     /**
      * 寻找所有安装的插件（在文件夹）, 并将它读取, 记录位置
@@ -109,7 +106,19 @@ object PluginManager {
         val pluginsFound: MutableMap<String, PluginDescription>
     )
 
-    internal fun findPlugins():FindPluginsResult{
+    /**
+     * 判断文件名/插件名是否已加载
+     */
+    private fun isPluginLoaded(file: File, name: String): Boolean {
+        pluginDescriptions.forEach {
+            if (it.key == name || it.value.file == file) {
+                return true
+            }
+        }
+        return false
+    }
+
+    internal fun findPlugins(): FindPluginsResult {
         val pluginsLocation: MutableMap<String, File> = mutableMapOf()
         val pluginsFound: MutableMap<String, PluginDescription> = mutableMapOf()
 
@@ -132,9 +141,12 @@ object PluginManager {
                                 // 关闭jarFile，解决热更新插件问题
                                 (it as JarURLConnection).jarFile.close()
                                 res
-                            })
-                        pluginsFound[description.name] = description
-                        pluginsLocation[description.name] = file
+                            }, file
+                        )
+                        if (!isPluginLoaded(file, description.name)) {
+                            pluginsFound[description.name] = description
+                            pluginsLocation[description.name] = file
+                        }
                     } catch (e: Exception) {
                         logger.info(e)
                     }
@@ -147,7 +159,7 @@ object PluginManager {
     /**
      * 尝试加载全部插件
      */
-    fun loadPlugins() {
+    fun loadPlugins(clear: Boolean = true) {
         logger.info("""开始加载${pluginsPath}下的插件""")
         val findPluginsResult = findPlugins()
         val pluginsFound = findPluginsResult.pluginsFound
@@ -190,7 +202,7 @@ object PluginManager {
                 return false
             }
 
-            if(description.loaded || nameToPluginBaseMap.containsKey(description.name)){
+            if (description.loaded || nameToPluginBaseMap.containsKey(description.name)) {
                 return true
             }
 
@@ -210,10 +222,10 @@ object PluginManager {
             logger.info("loading plugin " + description.name)
 
             val jarFile = pluginsLocation[description.name]!!
-            val pluginClass = try{
-                pluginsLoader.loadPluginMainClassByJarFile(description.name,description.basePath,jarFile)
+            val pluginClass = try {
+                pluginsLoader.loadPluginMainClassByJarFile(description.name, description.basePath, jarFile)
             } catch (e: ClassNotFoundException) {
-                pluginsLoader.loadPluginMainClassByJarFile(description.name,"${description.basePath}Kt",jarFile)
+                pluginsLoader.loadPluginMainClassByJarFile(description.name, "${description.basePath}Kt", jarFile)
             }
 
             val subClass = pluginClass.asSubclass(PluginBase::class.java)
@@ -237,20 +249,31 @@ object PluginManager {
         }
 
 
-        //清掉优先级队列, 来重新填充
-        pluginsSequence.clear()
+        if (clear) {
+            //清掉优先级队列, 来重新填充
+            pluginsSequence.clear()
+        }
 
         pluginsFound.values.forEach {
-            try{
+            try {
                 // 尝试加载插件
                 loadPlugin(it)
-            }catch (e: Throwable) {
+            } catch (e: Throwable) {
                 pluginsLoader.remove(it.name)
-                when(e){
-                    is ClassCastException -> logger.error("failed to load plugin " + it.name + " , Main class does not extends PluginBase",e)
-                    is ClassNotFoundException -> logger.error("failed to load plugin " + it.name + " , Main class not found under " + it.basePath,e)
-                    is NoClassDefFoundError -> logger.error("failed to load plugin " + it.name + " , dependent class not found.",e)
-                    else -> logger.error("failed to load plugin " + it.name,e)
+                when (e) {
+                    is ClassCastException -> logger.error(
+                        "failed to load plugin " + it.name + " , Main class does not extends PluginBase",
+                        e
+                    )
+                    is ClassNotFoundException -> logger.error(
+                        "failed to load plugin " + it.name + " , Main class not found under " + it.basePath,
+                        e
+                    )
+                    is NoClassDefFoundError -> logger.error(
+                        "failed to load plugin " + it.name + " , dependent class not found.",
+                        e
+                    )
+                    else -> logger.error("failed to load plugin " + it.name, e)
                 }
             }
         }
@@ -258,14 +281,14 @@ object PluginManager {
 
         pluginsSequence.forEach {
             try {
-                it.onLoad()
+                it.load()
             } catch (ignored: Throwable) {
                 logger.info(ignored)
                 logger.info(it.pluginName + " failed to load, disabling it")
                 logger.info(it.pluginName + " 推荐立即删除/替换并重启")
                 if (ignored is CancellationException) {
-                    disablePlugin(it,ignored)
-                }else{
+                    disablePlugin(it, ignored)
+                } else {
                     disablePlugin(it)
                 }
             }
@@ -279,8 +302,8 @@ object PluginManager {
                 logger.info(it.pluginName + " failed to enable, disabling it")
                 logger.info(it.pluginName + " 推荐立即删除/替换并重启")
                 if (ignored is CancellationException) {
-                    disablePlugin(it,ignored)
-                }else{
+                    disablePlugin(it, ignored)
+                } else {
                     disablePlugin(it)
                 }
             }
@@ -290,9 +313,9 @@ object PluginManager {
     }
 
     private fun disablePlugin(
-        plugin:PluginBase,
+        plugin: PluginBase,
         exception: CancellationException? = null
-    ){
+    ) {
         CommandManager.clearPluginCommands(plugin)
         plugin.disable(exception)
         nameToPluginBaseMap.remove(plugin.pluginName)
@@ -314,6 +337,15 @@ object PluginManager {
         pluginsSequence.clear()
     }
 
+    fun reloadPlugins() {
+        pluginsSequence.forEach {
+            if (it.reload()) {
+                disablePlugin(it)
+            }
+        }
+        loadPlugins(false)
+    }
+
 
     /**
      * 根据插件名字找Jar的文件
@@ -331,7 +363,8 @@ object PluginManager {
                         PluginDescription.readFromContent(
                             URL("jar:file:" + file.absoluteFile + "!/" + pluginYml.name).openConnection().inputStream.use {
                                 it.readBytes().encodeToString()
-                            })
+                            }, file
+                        )
                     if (description.name.toLowerCase() == pluginName.toLowerCase()) {
                         return file
                     }
