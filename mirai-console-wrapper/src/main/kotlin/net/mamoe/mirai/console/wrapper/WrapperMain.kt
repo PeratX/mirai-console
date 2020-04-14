@@ -254,8 +254,8 @@ private object WrapperProperties {
 
 private fun gc() {
     GlobalScope.launch {
-        while (true) {
-            delay(1000 * 60 * 5)
+        while (isActive) {
+            delay(1000 * 60)
             System.gc()
         }
     }

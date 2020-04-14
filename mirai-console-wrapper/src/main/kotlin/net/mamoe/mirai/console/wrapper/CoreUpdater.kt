@@ -58,7 +58,7 @@ internal object CoreUpdater {
                         url {
                             protocol = URLProtocol.HTTPS
                             host = "jcenter.bintray.com"
-                            path("net/mamoe/mirai-core-qqandroid-jvm/")
+                            path("net/mamoe/mirai-core-qqandroid/")
                         }
                     }).asSequence()
                 .map { it.value.drop(1).dropLast(1) }
